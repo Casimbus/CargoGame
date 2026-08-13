@@ -11,11 +11,18 @@ public class CameraControl : MonoBehaviour
     private bool isPinching;
     private float pinchStartDistance;
     private float pinchStartScale;
-   
+
+    private Camera uiCamera;
+
     void Start()
-    { 
+    {
         Canvas.ForceUpdateCanvases();
-      ScaleGameAreaToViewport();
+        ScaleGameAreaToViewport();
+
+        Canvas canvas = viewport.GetComponentInParent<Canvas>();
+        uiCamera = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            ? canvas.worldCamera
+            : null;
     }
     void Update()
     {
@@ -66,6 +73,8 @@ public class CameraControl : MonoBehaviour
         Touch touch1 = Input.GetTouch(1);
         float currentDistance =
             Vector2.Distance(touch0.position, touch1.position);
+        Vector2 pinchCenter = (touch0.position + touch1.position) * 0.5f;
+
         if (!isPinching)
         {
             isPinching = true;
@@ -76,36 +85,61 @@ public class CameraControl : MonoBehaviour
         }
         if (pinchStartDistance <= 0f)
             return;
-        
-        float zoomFactor = currentDistance / pinchStartDistance;
-        float newScale = pinchStartScale * zoomFactor;
 
-        newScale = Mathf.Clamp(newScale, GetMinimumScale(), maxSize);
-        gameArea.localScale = new Vector3(newScale, newScale, 1f);
+        float zoomFactor = currentDistance / pinchStartDistance;
+        float newScale = Mathf.Clamp(pinchStartScale * zoomFactor, GetMinimumScale(), maxSize);
+        float oldScale = gameArea.localScale.x;
+
+        if (!Mathf.Approximately(newScale, oldScale))
+        {
+            gameArea.anchoredPosition = GetZoomedPosition(pinchCenter, oldScale, newScale);
+            gameArea.localScale = new Vector3(newScale, newScale, 1f);
+        }
         gameArea.anchoredPosition = ClampCamera(gameArea.anchoredPosition);
     }
-    
+
     public void ZoomIn()
     {
         if (Input.GetAxis("Mouse ScrollWheel") > 0f)
         {
-            float newScale = gameArea.localScale.x + zoomStep;
-            float minScale = Mathf.Max(minSize, GetMinimumScale());
-            newScale = Mathf.Clamp(newScale, minScale, maxSize);
-            gameArea.localScale = new Vector3(newScale, newScale, 1f);
-            gameArea.anchoredPosition = ClampCamera(gameArea.anchoredPosition);
+            ApplyZoom(zoomStep, Input.mousePosition);
         }
     }
     public void ZoomOut()
     {
         if (Input.GetAxis("Mouse ScrollWheel") < 0f)
         {
-            float newScale = gameArea.localScale.x - zoomStep;
-            float minScale = Mathf.Max(minSize, GetMinimumScale());
-            newScale = Mathf.Clamp(newScale, minScale, maxSize);
-            gameArea.localScale = new Vector3(newScale, newScale, 1f);
-            gameArea.anchoredPosition = ClampCamera(gameArea.anchoredPosition);
+            ApplyZoom(-zoomStep, Input.mousePosition);
         }
+    }
+
+    private void ApplyZoom(float delta, Vector2 screenPoint)
+    {
+        float oldScale = gameArea.localScale.x;
+        float minScale = Mathf.Max(minSize, GetMinimumScale());
+        float newScale = Mathf.Clamp(oldScale + delta, minScale, maxSize);
+
+        if (!Mathf.Approximately(newScale, oldScale))
+        {
+            gameArea.anchoredPosition = GetZoomedPosition(screenPoint, oldScale, newScale);
+            gameArea.localScale = new Vector3(newScale, newScale, 1f);
+        }
+        gameArea.anchoredPosition = ClampCamera(gameArea.anchoredPosition);
+    }
+
+    /// <summary>
+    /// Computes the anchoredPosition needed so that the world point currently under
+    /// screenPoint stays under screenPoint after scaling from oldScale to newScale.
+    /// </summary>
+    private Vector2 GetZoomedPosition(Vector2 screenPoint, float oldScale, float newScale)
+    {
+        Vector2 localPoint;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, screenPoint, uiCamera, out localPoint);
+
+        Vector2 oldAnchoredPosition = gameArea.anchoredPosition;
+        float ratio = newScale / oldScale;
+
+        return localPoint - (localPoint - oldAnchoredPosition) * ratio;
     }
 
     private Vector2 ClampCamera(Vector2 targetPosition)
@@ -148,7 +182,7 @@ public class CameraControl : MonoBehaviour
         gameArea.anchoredPosition = oldPosition;
         return targetPosition + correction;
     }
-    
+
     private float GetMinimumScale()
     {
         float scaleX = viewport.rect.width / gameArea.rect.width;
@@ -156,7 +190,7 @@ public class CameraControl : MonoBehaviour
         float requiredScale = Mathf.Max(scaleX, scaleY);
         return Mathf.Max(minSize, requiredScale);
     }
-    
+
     private void ScaleGameAreaToViewport()
     {
         float startScale = GetMinimumScale();
