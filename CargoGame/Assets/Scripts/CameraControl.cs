@@ -8,10 +8,10 @@ public class CameraControl : MonoBehaviour
     [SerializeField] float zoomStep, minSize, maxSize;
     [SerializeField] RectTransform viewport;
     private Vector2 originPosition;
-    
-    private float previousDistance;
-    private float minX, maxX, minY, maxY;
-
+    private bool isPinching;
+    private float pinchStartDistance;
+    private float pinchStartScale;
+   
     void Start()
     { 
         Canvas.ForceUpdateCanvases();
@@ -19,9 +19,25 @@ public class CameraControl : MonoBehaviour
     }
     void Update()
     {
-        PanCamera();
-        ZoomIn();
-        ZoomOut();
+#if UNITY_ANDROID || UNITY_IOS
+        if (Input.touchCount == 2)
+        {
+            ZoomMobile();
+        }
+        else
+        {
+            isPinching = false;
+            if (Input.touchCount == 1)
+            {
+                PanMobile();
+            }
+        }
+
+#else
+    PanCamera();
+    ZoomIn();
+    ZoomOut();
+#endif
     }
 
     private void PanCamera()
@@ -30,7 +46,6 @@ public class CameraControl : MonoBehaviour
         {
             originPosition = Input.mousePosition;
         }
-
         if (Input.GetMouseButton(0))
         {
             Vector2 currentPosition = Input.mousePosition;
@@ -40,29 +55,34 @@ public class CameraControl : MonoBehaviour
             originPosition = currentPosition;
         }
     }
-    
-    public void ZoomMobile()
+    private void ZoomMobile()
     {
-        if (Input.touchCount >= 2)
+        if (Input.touchCount != 2)
         {
-            Vector2 touch0 = Input.GetTouch(0).position;
-            Vector2 touch1 = Input.GetTouch(1).position;
-            float currentDistance = Vector2.Distance(touch0, touch1);
-            if (previousDistance != 0f)
-            {
-                float difference = currentDistance - previousDistance;
-                float newScale = gameArea.localScale.x + zoomStep * difference;
-                float minScale = Mathf.Max(minSize, GetMinimumScale());
-                newScale = Mathf.Clamp(newScale, minScale, maxSize);
-                gameArea.localScale = new Vector3(newScale, newScale, 1f);
-                gameArea.anchoredPosition = ClampCamera(gameArea.anchoredPosition);
-            }
-            previousDistance = currentDistance;
+            isPinching = false;
+            return;
         }
-        else
+        Touch touch0 = Input.GetTouch(0);
+        Touch touch1 = Input.GetTouch(1);
+        float currentDistance =
+            Vector2.Distance(touch0.position, touch1.position);
+        if (!isPinching)
         {
-            previousDistance = 0f;
+            isPinching = true;
+            pinchStartDistance = currentDistance;
+            pinchStartScale = gameArea.localScale.x;
+
+            return;
         }
+        if (pinchStartDistance <= 0f)
+            return;
+        
+        float zoomFactor = currentDistance / pinchStartDistance;
+        float newScale = pinchStartScale * zoomFactor;
+
+        newScale = Mathf.Clamp(newScale, GetMinimumScale(), maxSize);
+        gameArea.localScale = new Vector3(newScale, newScale, 1f);
+        gameArea.anchoredPosition = ClampCamera(gameArea.anchoredPosition);
     }
     
     public void ZoomIn()
@@ -128,8 +148,7 @@ public class CameraControl : MonoBehaviour
         gameArea.anchoredPosition = oldPosition;
         return targetPosition + correction;
     }
-
-
+    
     private float GetMinimumScale()
     {
         float scaleX = viewport.rect.width / gameArea.rect.width;
@@ -143,5 +162,23 @@ public class CameraControl : MonoBehaviour
         float startScale = GetMinimumScale();
         gameArea.localScale = new Vector3(startScale, startScale, 1f);
         gameArea.anchoredPosition = Vector2.zero;
+    }
+    private void PanMobile()
+    {
+        if (Input.touchCount != 1)
+            return;
+        Touch touch = Input.GetTouch(0);
+        if (touch.phase == TouchPhase.Began)
+        {
+            originPosition = touch.position;
+        }
+        if (touch.phase == TouchPhase.Moved)
+        {
+            Vector2 currentPosition = touch.position;
+            Vector2 difference = currentPosition - originPosition;
+            Vector2 targetPosition = gameArea.anchoredPosition + difference;
+            gameArea.anchoredPosition = ClampCamera(targetPosition);
+            originPosition = currentPosition;
+        }
     }
 }

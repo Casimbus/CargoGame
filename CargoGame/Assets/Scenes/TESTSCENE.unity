@@ -352,6 +352,7 @@ MonoBehaviour:
   zoomStep: 1
   minSize: 1
   maxSize: 5
+  mobileZoomStep: 0.01
   viewport: {fileID: 915217475}
 --- !u!1 &619394800
 GameObject:
