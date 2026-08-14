@@ -4,9 +4,12 @@ using UnityEngine.UI;
 
 public class GridManager : MonoBehaviour
 {
+    [Header("Tile Assets")]
+    //TODO ADD IMAGES (ASSETS) FOR TILE
     [SerializeField] private RectTransform gameArea;
    [SerializeField] private Image tile;
-   [SerializeField] private float tileSize;   
+   [SerializeField] private float tileSize;
+   
     void Start()
     {
         GenerateGrid();
@@ -27,6 +30,7 @@ public class GridManager : MonoBehaviour
             for (int y = 0; y < rows; y++)
             {
                 Image newTile = Instantiate(tile, transform);
+                newTile.color = Random.ColorHSV();
               RectTransform rect = newTile.rectTransform;
               rect.sizeDelta = new Vector2(tileSize, tileSize);
               rect.anchorMin = Vector2.zero;
@@ -38,5 +42,7 @@ public class GridManager : MonoBehaviour
             }
         }
     }
+    
+    
 
 }
